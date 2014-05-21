@@ -1,0 +1,340 @@
+#!/bin/bash
+
+###################################################
+#
+# Small invoker for ffmpeg to quickly convert
+# between video formats; especially meant to
+# pick up a non-compressed output from FinalCutX
+# and compress it with about no loss of quality
+# (and optionally also generate a flash version).
+#
+# Requires ffmpeg and in a way substitutes
+# compressor.
+#
+# At the end of the file there are some comments
+# on how I installed ffmpeg on ubuntu.
+# 
+###################################################
+# (c) Matthias Nott, SAP. Licensed under WFTPL.
+###################################################
+#
+# Progress Bar was built based on
+#
+# https://gist.github.com/pruperting/397509
+#
+###################################################
+
+###################################################
+#
+# Default Configurations (see usage function).
+#
+###################################################
+
+START=""
+DURATION=""
+THREADS="-threads 8"
+RESOLUTION=
+ASPECT=
+BITRATE="-b:v 9000k"
+PASSES=2
+FLASH=false
+LOGLEVEL="-loglevel warning"
+INPUT=
+OUTPUT=
+TMPDIR=/tmp/vcompress  # changed later
+
+###################################################
+# End of Configuration.
+###################################################
+
+#
+# Usage
+#
+usage(){
+cat <<EOF
+Usage: $0 [options] input.mov output.mov
+
+-h| --help                 :  Print this help.
+-s| --start 3              :  Start encoding at 3 seconds.
+-d| --duration 4           :  Encode only 4 seconds.
+-t| --threads 4            :  Use 4 threads. Default: 8.
+-r| --resolution 1920x1080 :  Change resolution. Default: keep.
+-a| --aspect 16:9          :  Change aspect ratio. Default: keep.
+-b| --bitrate 9000k        :  Bitrate (quality). Default: 9000k.
+-p| --passes 2             :  Use 1 or two passes. Default: 2.
+-f| --flash                :  Also generate .flv file. Default: don't generate.
+-l| --loglevel             :  Verbosity. Default: warning. Other values: quiet|panic|fatal|error|warning|info|verbose|debug
+
+EOF
+}
+
+progress()
+{
+  START=$(date +%s); FR_CNT=0; ETA=0; ELAPSED=0
+  while [ -e /proc/$PID ]; do                         # Is FFmpeg running?
+    sleep 2
+    VSTATS=$(awk '{gsub(/frame=/, "")}/./{line=$1-1} END{print line}' ${TMPDIR}/vstats 2>/dev/null)
+    if [ "$VSTATS" == "" ]; then VSTATS="0"; fi
+    if [ "$VSTATS" -gt "$FR_CNT" ]; then              # Parsed sane or no?
+      FR_CNT=$VSTATS
+      PERCENTAGE=$(( 100 * FR_CNT / TOT_FR ))         # Progbar calc.
+      ELAPSED=$(( $(date +%s) - START )); echo $ELAPSED > $TMPDIR/elapsed.value
+      ETA=$(date -d @$(awk 'BEGIN{print int(('$ELAPSED' / '$FR_CNT') *\
+      ('$TOT_FR' - '$FR_CNT'))}') -u +%H:%M:%S)       # ETA calc.
+    fi
+    echo -ne "\rFrame: $FR_CNT of $TOT_FR Time: $(date -d @$ELAPSED -u +%H:%M:%S) ETA: $ETA Percent: $PERCENTAGE"
+  done
+}
+
+
+#
+# Cleanup
+#
+cleanup() {
+  rm -rf $TMPDIR
+}
+
+
+#
+# Parameter Parsing
+#
+if [[ "$1" =~ ^((-{1,2})([Hh]$|[Hh][Ee][Ll][Pp])|)$ ]]; then
+  usage; exit 1
+else
+  while [[ $# -gt 2 ]]; do
+    opt="$1"
+    shift;
+    case "$opt" in
+      "-s"|"--start"      ) opt="FROM";       declare ${opt}="-ss $1";;
+      "-d"|"--duration"   ) opt="DURATION";   declare ${opt}="-t $1";;
+      "-t"|"--threads"    ) opt="THREADS";    declare ${opt}="-threads $1";;
+      "-r"|"--resolution" ) opt="RESOLUTION"; declare ${opt}="-s $1";;
+      "-a"|"--aspect"     ) opt="ASPECT";     declare ${opt}="-aspect $1";;
+      "-b"|"--bitrate"    ) opt="BITRATE";    declare ${opt}="-b:v $1";;
+      "-p"|"--passes"     ) opt="PASSES";     declare ${opt}="$1";;
+      "-f"|"--flash"      ) opt="FLASH";      declare ${opt}="true";;
+      "-l"|"--loglevel"   ) opt="LOGLEVEL";   declare ${opt}="-loglevel $1";;
+        *                 ) echo "ERROR: Invalid option: \""$opt"\"" >&2; usage; exit 1;;
+    esac
+    if [[ "$1" == -* ]] || [[ "$1" == "" ]]; then declare ${opt}=""; else [[ $# -gt 2 ]] && shift; fi
+  done
+fi
+if [[ $# -lt 2 ]] || [[ "$1" == -* ]] || [[ "$2" == -* ]]; then
+  usage; exit 1
+else
+  INFILE="$1"
+  OUTFILE="$2"
+fi
+
+
+#
+# We give a warning as we don't bother at this moment counting the
+# number of frames if we have only a part of the movie to convert.
+#
+INACCURATE=""
+if [[ "$FROM" != "" ]] || [[ "$DURATION" != "" ]]; then
+  INACCURATE="(Inaccurate: not working on full movie.)"
+fi
+
+
+#
+# Create temporary directory
+#
+TMPDIR=`mktemp -d -t vcompress.XXX --tmpdir=.`
+
+
+#
+# Kill & Clean if Stopped
+#
+trap "killall ffmpeg $0 2>/dev/null; cleanup; exit" INT TERM EXIT
+
+
+#
+# Get duration and PAL/NTSC fps then calculate total frames.
+#
+FPS=$(ffprobe "$INFILE" 2>&1 | sed -n "s/.*, \(.*\) tbr.*/\1/p")
+DUR=$(ffprobe "$INFILE" 2>&1 | sed -n "s/.* Duration: \([^,]*\), .*/\1/p")
+HRS=$(echo $DUR | cut -d":" -f1)
+MIN=$(echo $DUR | cut -d":" -f2)
+SEC=$(echo $DUR | cut -d":" -f3)
+TOT_FR=$(echo "($HRS*3600+$MIN*60+$SEC)*$FPS" | bc | cut -d"." -f1)
+if [ ! "$TOT_FR" -gt "0" ]; then echo error; cleanup; exit; fi
+
+
+
+#
+# Get first timestamp
+#
+echo "============================================================================"
+startdate=$(date +"%s")
+echo Starting conversion at $(date +"%T").
+echo "============================================================================"
+
+#
+# Double or Single Pass
+#
+if [ "$PASSES" == "2" ]; then
+  nice -n 15 ffmpeg -vstats_file $TMPDIR/vstats -i "$INFILE" -y $LOGLEVEL $FROM $DURATION -vcodec libx264 -pix_fmt yuv420p -profile:v baseline -preset slower -f mov -sn -acodec copy -g 300 -bf 2 -strict 1 -ac 2 $RESOLUTION $THREADS -trellis 1 -mbd 2 $BITRATE $ASPECT -pass 1 -passlogfile $TMPDIR/log.log -y /dev/null &
+  PID=$! &&
+  echo "Length: $DUR - Frames: $TOT_FR $INACCURATE"
+  echo ""
+  progress
+  rm -f $TMPDIR/vstats*
+
+  date2=$(date +"%s")
+  diff1=$(($date2-$startdate))
+  echo ""
+  echo "----------------------------------------------------------------------------"
+  echo "$(($diff1 / 60)) minutes and $(($diff1 % 60)) seconds elapsed for the first pass."
+  echo "----------------------------------------------------------------------------"
+
+  nice -n 15 ffmpeg -vstats_file $TMPDIR/vstats -i "$INFILE" -y $LOGLEVEL $FROM $DURATION -vcodec libx264 -pix_fmt yuv420p -profile:v baseline -preset slower -f mov -sn -acodec copy -g 300 -bf 2 -strict 1 -ac 2 $RESOLUTION $THREADS -trellis 1 -mbd 2 $BITRATE $ASPECT -pass 2 -passlogfile $TMPDIR/log.log "$OUTFILE" &
+  PID=$! &&
+  echo "Length: $DUR - Frames: $TOT_FR $INACCURATE"
+  echo ""
+  progress
+  rm -f $TMPDIR/vstats*
+
+  date3=$(date +"%s")
+  diff2=$(($date3-$date2))
+  echo ""
+  echo "----------------------------------------------------------------------------"
+  echo "$(($diff2 / 60)) minutes and $(($diff2 % 60)) seconds elapsed for the second pass."
+  echo "----------------------------------------------------------------------------"
+else
+  nice -n 15 ffmpeg -vstats_file $TMPDIR/vstats -i "$INFILE" -y $LOGLEVEL $FROM $DURATION -vcodec libx264 -pix_fmt yuv420p -profile:v baseline -preset slower -f mov -sn -acodec copy -g 300 -bf 2 -strict 1 -ac 2 $RESOLUTION $THREADS -trellis 1 -mbd 2 $BITRATE $ASPECT -pass 1 "$OUTFILE" &
+  PID=$! &&
+  echo "Length: $DUR - Frames: $TOT_FR $INACCURATE"
+  echo ""
+  progress
+  rm -f $TMPDIR/vstats*
+
+  date2=$(date +"%s")
+  diff1=$(($date2-$startdate))
+  echo "----------------------------------------------------------------------------"
+  echo "$(($diff1 / 60)) minutes and $(($diff1 % 60)) seconds elapsed for the first pass."
+  echo "----------------------------------------------------------------------------"
+fi
+
+#
+# Optionally, do the conversion to .flv
+#
+if [ "$FLASH" == "true" ]; then
+  flvstartdate=$(date +"%s")
+  FLVFILE="${OUTFILE%%????}.flv"
+  if [ "$FLVFILE" == "$OUTFILE" ]; then FLVFILE="${OUTFILE}.flv"; fi
+  nice -n 15 ffmpeg -vstats_file $TMPDIR/vstats -i "$OUTFILE" -y $LOGLEVEL -c copy -c:a aac -strict experimental $THREADS "$FLVFILE" &
+  PID=$! &&
+  echo "Length: $DUR - Frames: $TOT_FR $INACCURATE"
+  echo ""
+  progress
+  rm -f $TMPDIR/vstats*
+
+  date4=$(date +"%s")
+  diff4=$(($date4-$flvstartdate))
+  echo ""
+  echo "----------------------------------------------------------------------------"
+  echo "$(($diff4 / 60)) minutes and $(($diff4 % 60)) seconds elapsed for the flv conversion."
+  echo "----------------------------------------------------------------------------"
+fi
+
+
+#
+# Get final timestamp
+#
+enddate=$(date +"%s")
+totaltime=$(($enddate-$startdate))
+echo "============================================================================"
+echo "$(($totaltime / 60)) minutes and $(($totaltime % 60)) seconds elapsed in total."
+echo "----------------------------------------------------------------------------"
+echo "Ended conversion at $(date +"%T")."
+echo "============================================================================"
+
+#
+# Remove temporary directory
+#
+rm -rf $TMPDIR
+
+
+#
+# End of Script.
+#
+
+
+###################################################
+#
+# Some more comments about ffmpeg on Ubuntu
+#
+###################################################
+: <<'COMMENTS'
+
+Here is how I installed ffmpeg on Ubuntu - there are some bits missing in the out-of-the-box
+installation, so I needed to compile it myself.
+
+First of all, I removed all traces of ffmpeg:
+
+sudo apt-get --purge remove ffmpeg
+sudo apt-get --purge remove libav-tools
+sudo apt-get --purge autoremove
+
+Then, I installed some helpers:
+
+sudo apt-get update
+sudo apt-get -y install autoconf automake build-essential libass-dev libfreetype6-dev libgpac-dev   libsdl1.2-dev libtheora-dev libtool libva-dev libvdpau-dev libvorbis-dev libx11-dev   libxext-dev libxfixes-dev pkg-config texi2html zlib1g-dev yasm
+
+
+Next, I made some directory and got the source of ffmpeg:
+
+mkdir ~/ffmpeg_sources
+
+I then made the x264 encoder libaries:
+
+cd ~/ffmpeg_sources
+wget http://download.videolan.org/pub/x264/snapshots/last_x264.tar.bz2
+tar xjvf last_x264.tar.bz2
+cd x264-snapshot*
+./configure --prefix="$HOME/ffmpeg_build" --bindir="$HOME/bin" --enable-static
+make
+sudo make install
+
+Next, I made aac:
+
+cd ~/ffmpeg_sources
+wget -O fdk-aac.zip https://github.com/mstorsjo/fdk-aac/zipball/master
+unzip fdk-aac.zip
+cd mstorsjo-fdk-aac*
+autoreconf -fiv
+./configure --prefix="$HOME/ffmpeg_build" --disable-shared
+make
+sudo make install
+make distclean
+
+Next step was to get mp3lame and opus:
+
+sudo apt-get install libmp3lame-dev
+sudo apt-get install libopus-dev
+
+Then, I make libvpx:
+
+cd ~/ffmpeg_sources
+wget http://webm.googlecode.com/files/libvpx-v1.3.0.tar.bz2
+tar xjvf libvpx-v1.3.0.tar.bz2
+cd libvpx-v1.3.0
+./configure --prefix="$HOME/ffmpeg_build" --disable-examples
+make
+sudo make install
+make clean
+
+Finally, make ffmpeg:
+
+cd ~/ffmpeg_sources
+wget http://ffmpeg.org/releases/ffmpeg-snapshot.tar.bz2
+tar xjvf ffmpeg-snapshot.tar.bz2
+cd ffmpeg
+export PKG_CONFIG_PATH="$HOME/ffmpeg_build/lib/pkgconfig"
+./configure --prefix="$HOME/ffmpeg_build" --extra-cflags="-I$HOME/ffmpeg_build/include"    --extra-ldflags="-L$HOME/ffmpeg_build/lib" --bindir="$HOME/bin" --extra-libs="-ldl" --enable-gpl    --enable-libass --enable-libfdk-aac --enable-libfreetype --enable-libmp3lame --enable-libopus    --enable-libtheora --enable-libvorbis --enable-libvpx --enable-libx264 --enable-nonfree --enable-x11grab --enable-nonfree --enable-libfaac --enable-libfdk-aac --enable-libmp3lame --enable-libtheora --enable-libx264 --enable-opengl --enable-openssl --enable-x11grab
+make
+sudo make install
+hash -r
+
+COMMENTS
