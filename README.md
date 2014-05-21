@@ -1,7 +1,6 @@
 Welcome to vcompress!
 =====================
 
-----------
 
 Summary
 ---------
@@ -17,38 +16,27 @@ Installation
 ---------
 
 Copy **vcompress** to your linux box. Optionally, you can look towards the end of the script where I have put, in a comments section, the steps I took to install ffmpeg and related.
+Make the file executable with something like
+
+```
+# chmod 755 vcompress
+```
 
 ----------
 
 Usage
 ---------
 
-```
-./vcompress
-Usage: ./vcompress [options] input.mov output.mov
-
--h| --help                 :  Print this help.
--s| --start 3              :  Start encoding at 3 seconds.
--d| --duration 4           :  Encode only 4 seconds.
--t| --threads 4            :  Use 4 threads. Default: 8.
--r| --resolution 1920x1080 :  Change resolution. Default: keep.
--a| --aspect 16:9          :  Change aspect ratio. Default: keep.
--b| --bitrate 9000k        :  Bitrate (quality). Default: 9000k.
--p| --passes 2             :  Use 1 or two passes. Default: 2.
--f| --flash                :  Also generate .flv file. Default: don't generate.
--l| --loglevel             :  Verbosity. Default: warning. Other values: quiet|panic|fatal|error|warning|info|verbose|debug
-```
-
-Which means, in it's easiest form, you can just call it like so:
+In it's easiest form, you can just call the script like so:
 
 ```
-./vcompress input.mov output.mov
+# ./vcompress input.mov output.mov
 ```
 
 And if you want to have generated a flash file with it, you say
 
 ```
-./vcompress -f input.mov output.mov
+# ./vcompress -f input.mov output.mov
 ```
 
 This will do a two-pass compression - and optionally an added flv conversion - of your input.mov:
@@ -82,6 +70,75 @@ Frame: 0 of 24 Time: 00:00:00 ETA: 0 Percent: 95
 Ended conversion at 14:19:07.
 ============================================================================
 ```
+
+
+----------
+
+Parameters
+---------
+
+Parameters can be used in any order, except for that the last two must be input- and output file, respectively
+
+```
+# ./vcompress
+Usage: ./vcompress [options] input.mov output.mov
+
+-h| --help                 :  Print this help.
+-s| --start 3              :  Start encoding at 3 seconds.
+-d| --duration 4           :  Encode only 4 seconds.
+-t| --threads 4            :  Use 4 threads. Default: 8.
+-r| --resolution 1920x1080 :  Change resolution. Default: keep.
+-a| --aspect 16:9          :  Change aspect ratio. Default: keep.
+-b| --bitrate 9000k        :  Bitrate (quality). Default: 9000k.
+-p| --passes 2             :  Use 1 or two passes. Default: 2.
+-f| --flash                :  Also generate .flv file. Default: don't generate.
+-l| --loglevel             :  Verbosity. Default: warning. Other values: quiet|panic|fatal|error|warning|info|verbose|debug
+```
+
+### -s / --start
+
+This parameter allows you to start compressing not at the beginning, but at some other point into the video.
+Notice that the progress bar that I show during the video will then not be correct, as I don't bother actually
+counting the frames up to that point.
+
+### -d / --duration
+
+Define the length of transcoding you want to do. In combination with the -s parameter, it allows you to do a quick assessment
+of your compression, like so:
+
+```
+# ./vcompress -s 1 -d 5 input.mov output.mov
+```
+
+Notice, also, that like with the -s parameter, the progress bar will not be correct.
+
+### -t / --threads
+
+This parameter takes a numeric value and defines the number of cores you want to use on your machine at maximum. Default is 8.
+
+### -r / --resolution
+
+Allows you to change the resolution of your video. Default is not to change the resolution.
+
+### -a / --aspect
+
+Allows you to change the aspect rate (like, from 16:9 to 4:3). Default is not to change the aspect rate.
+
+### -b / --bitrate
+
+Lets you specify the video quality (the audio stream is passed through as it was, except for the flash part, where it is converted to aac). Default value is 9000k, which gives about exactly the same result as Apple's compressor.
+
+### -p / --passes
+
+Running two passes (default) is a good thing for quality; you can yet also say you don't want to do that: The parameter takes a numeric value (where anything different from 2 means, one pass only).
+
+### -f / --flash
+
+Convert the final result in addition into a flash file. This is useful if you want to share the file yourself.
+
+### -l / --loglevel
+
+Default is warning which makes ffmpeg less verbose and allows you to concentrate on the actual progress.
 
 
 ----------
