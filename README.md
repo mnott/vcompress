@@ -9,7 +9,7 @@ Summary
 This is a small wrapper script (and installation documentation) that I came up with when I had to compress a larger number of videos for a client. My MacBook Air was giving me render times of like 24 hours for one hour of video. Using the open source software ffmpeg - and figuring out how to make it work and give a same quality result - I was able to reduce the render time from 24 hours to 15 minutes and hence also avoid buying another solution - e.g. a MacPro - for like 8k. The lazy person I am, I decided to script the whole process. Further below is a little more history on the setup that I use, but let's get at it.
 
 
-This script - **vcompress** - I share here for you to hack away on. It cut down not only my dependency on Apple (let alone shelling out 8k USD for a MacPro), **it also cut down my rendering times from 24 hours to, yes, 15 minutes**.
+This script - **vcompress** - I share here for you to hack away on.
 
 ----------
 
