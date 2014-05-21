@@ -1,4 +1,4 @@
-Welcome to vcompress!	{#welcome}
+Welcome to vcompress!
 =====================
 
 ----------
