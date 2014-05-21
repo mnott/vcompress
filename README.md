@@ -114,25 +114,3 @@ Which, of course, is [ffmpeg][7]. The issue with that software is probably again
 
 So I went through the options I had, did a lot of Googling, made the software run (how I did is in the comments section of the vcompress script) and then wrote a very simple to use shell script that allows you to invoke the compression on a video you export from FinalCut and have it compress - and optionally as well converted into a .flv (for platform independent serving).
 
-
-----------
-
-Table of contents
----------
-
-You can insert a table of contents using the marker `[TOC]`:
-
-[TOC]
-
-----------
-
-Notes
----------
-
-  [1]: http://de.wikipedia.org/wiki/Canon_EOS_7D
-  [2]: http://www.cameralabs.com/reviews/Canon_PowerShot_SX50_HS/
-  [3]: http://www.pauljoy.com/gear/camera-support/miller-ds20-solo-dv/
-  [4]: http://www.rolandsystemsgroup.com/products/100093
-  [5]: http://www.siliconmechanics.com
-  [6]: http://de.wikipedia.org/wiki/VirtualBox
-  [7]: http://www.ffmpeg.org
