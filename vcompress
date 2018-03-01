@@ -13,7 +13,7 @@
 #
 # At the end of the file there are some comments
 # on how I installed ffmpeg on ubuntu.
-# 
+#
 ###################################################
 # (c) Matthias Nott, SAP. Licensed under WFTPL.
 ###################################################
@@ -275,17 +275,33 @@ First of all, I removed all traces of ffmpeg:
 
 sudo apt-get --purge remove ffmpeg
 sudo apt-get --purge remove libav-tools
+sudo apt-get --purge remove nasm
 sudo apt-get --purge autoremove
 
 Then, I installed some helpers:
 
 sudo apt-get update
-sudo apt-get -y install autoconf automake build-essential libass-dev libfreetype6-dev libgpac-dev   libsdl1.2-dev libtheora-dev libtool libva-dev libvdpau-dev libvorbis-dev libx11-dev   libxext-dev libxfixes-dev pkg-config texi2html zlib1g-dev yasm
+sudo apt-get -y install autoconf automake build-essential libass-dev libfreetype6-dev libgpac-dev libsdl1.2-dev libtheora-dev libtool libva-dev libvdpau-dev libvorbis-dev libx11-dev libxext-dev libxfixes-dev pkg-config texi2html zlib1g-dev yasm
 
 
 Next, I made some directory to work in:
 
 mkdir ~/ffmpeg_sources
+
+Then I installed nasm, which was new for me that it was needed
+in a specific version:
+
+wget http://www.nasm.us/pub/nasm/releasebuilds/2.13.02/nasm-2.13.02.tar.bz2
+tar xjvf nasm-2.13.02.tar.bz2
+cd nasm-2.13.02
+./autogen.sh
+PATH="$HOME/bin:$PATH" ./configure --prefix="$HOME/ffmpeg_build" --bindir="$HOME/bin"
+make
+sudo make install
+sudo cp "$HOME/bin/nasm" /usr/local/bin
+sudo cp "$HOME/bin/ndisasm" /usr/local/bin
+
+
 
 I then made the x264 encoder libaries:
 
@@ -317,9 +333,9 @@ sudo apt-get install libopus-dev
 Then, I make libvpx:
 
 cd ~/ffmpeg_sources
-wget http://webm.googlecode.com/files/libvpx-v1.3.0.tar.bz2
-tar xjvf libvpx-v1.3.0.tar.bz2
-cd libvpx-v1.3.0
+wget https://download.videolan.org/contrib/vpx/libvpx-1.6.1.tar.bz2
+tar xjvf libvpx-1.6.1.tar.bz2
+cd libvpx-1.6.1
 ./configure --prefix="$HOME/ffmpeg_build" --disable-examples
 make
 sudo make install
@@ -332,9 +348,15 @@ wget http://ffmpeg.org/releases/ffmpeg-snapshot.tar.bz2
 tar xjvf ffmpeg-snapshot.tar.bz2
 cd ffmpeg
 export PKG_CONFIG_PATH="$HOME/ffmpeg_build/lib/pkgconfig"
-./configure --prefix="$HOME/ffmpeg_build" --extra-cflags="-I$HOME/ffmpeg_build/include"    --extra-ldflags="-L$HOME/ffmpeg_build/lib" --bindir="$HOME/bin" --extra-libs="-ldl" --enable-gpl    --enable-libass --enable-libfdk-aac --enable-libfreetype --enable-libmp3lame --enable-libopus    --enable-libtheora --enable-libvorbis --enable-libvpx --enable-libx264 --enable-nonfree --enable-x11grab --enable-nonfree --enable-libfaac --enable-libfdk-aac --enable-libmp3lame --enable-libtheora --enable-libx264 --enable-opengl --enable-openssl --enable-x11grab
+./configure --prefix="$HOME/ffmpeg_build" --extra-cflags="-I$HOME/ffmpeg_build/include"    --extra-ldflags="-L$HOME/ffmpeg_build/lib" --bindir="$HOME/bin" --extra-libs="-ldl" --enable-gpl    --enable-libass --enable-libfdk-aac --enable-libfreetype --enable-libmp3lame --enable-libopus    --enable-libtheora --enable-libvorbis --enable-libvpx --enable-libx264 --enable-nonfree --enable-nonfree --enable-libfdk-aac --enable-libmp3lame --enable-libtheora --enable-libx264 --enable-opengl --enable-openssl
 make
 sudo make install
 hash -r
+
+Finally, for the step to actually have the -i option (avconv) working,
+I now had to do this:
+
+cd /usr/lib/x86_64-linux-gnu
+sudo ln -s libx264.so libx264.so.123
 
 COMMENTS
