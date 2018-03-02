@@ -32,6 +32,8 @@
 
 START=""
 DURATION=""
+TO=""
+IPAD=""
 THREADS="-threads 8"
 RESOLUTION=
 ASPECT=
