@@ -57,6 +57,7 @@ Usage: $0 [options] input.mov output.mov
 -h| --help                 :  Print this help.
 -s| --start 3              :  Start encoding at 3 seconds.
 -d| --duration 4           :  Encode only 4 seconds.
+-e| --end 2                :  Cut 2 seconds from the end.
 -t| --threads 4            :  Use 4 threads. Default: 8.
 -r| --resolution 1920x1080 :  Change resolution. Default: keep.
 -a| --aspect 16:9          :  Change aspect ratio. Default: keep.
@@ -64,6 +65,7 @@ Usage: $0 [options] input.mov output.mov
 -p| --passes 2             :  Use 1 or two passes. Default: 2.
 -f| --flash                :  Also generate .flv file. Default: don't generate.
 -l| --loglevel             :  Verbosity. Default: warning. Other values: quiet|panic|fatal|error|warning|info|verbose|debug
+-i| --ipad                 :  Recode Audio for iPad / VLC
 
 EOF
 }
@@ -106,6 +108,7 @@ else
     shift;
     case "$opt" in
       "-s"|"--start"      ) opt="FROM";       declare ${opt}="-ss $1";;
+      "-e"|"--end"        ) opt="TO";         declare ${opt}="-sseof $1";;
       "-d"|"--duration"   ) opt="DURATION";   declare ${opt}="-t $1";;
       "-t"|"--threads"    ) opt="THREADS";    declare ${opt}="-threads $1";;
       "-r"|"--resolution" ) opt="RESOLUTION"; declare ${opt}="-s $1";;
@@ -114,6 +117,7 @@ else
       "-p"|"--passes"     ) opt="PASSES";     declare ${opt}="$1";;
       "-f"|"--flash"      ) opt="FLASH";      declare ${opt}="true";;
       "-l"|"--loglevel"   ) opt="LOGLEVEL";   declare ${opt}="-loglevel $1";;
+      "-i"|"--ipad"       ) opt="IPAD";       declare ${opt}="true";;
         *                 ) echo "ERROR: Invalid option: \""$opt"\"" >&2; usage; exit 1;;
     esac
     if [[ "$1" == -* ]] || [[ "$1" == "" ]]; then declare ${opt}=""; else [[ $# -gt 2 ]] && shift; fi
@@ -126,13 +130,22 @@ else
   OUTFILE="$2"
 fi
 
+#
+# This is a late addition to support audio conversion for VLC on the ipad. It really
+# has nothing to do with all the rest.
+#
+if [[ "$IPAD" == "true" ]]; then
+  avconv -i "$INFILE" -strict experimental -c:a aac -c:v copy "$OUTFILE"
+  mv "$OUTFILE" "$INFILE"
+fi
+
 
 #
 # We give a warning as we don't bother at this moment counting the
 # number of frames if we have only a part of the movie to convert.
 #
 INACCURATE=""
-if [[ "$FROM" != "" ]] || [[ "$DURATION" != "" ]]; then
+if [[ "$FROM" != "" ]] || [[ "$DURATION" != "" ]] || [[ "$TO" != "" ]]; then
   INACCURATE="(Inaccurate: not working on full movie.)"
 fi
 
@@ -174,7 +187,7 @@ echo "==========================================================================
 # Double or Single Pass
 #
 if [ "$PASSES" == "2" ]; then
-  nice -n 15 ffmpeg -vstats_file $TMPDIR/vstats -i "$INFILE" -y $LOGLEVEL $FROM $DURATION -vcodec libx264 -pix_fmt yuv420p -profile:v baseline -preset slower -f mov -sn -acodec copy -g 300 -bf 2 -strict 1 -ac 2 $RESOLUTION $THREADS -trellis 1 -mbd 2 $BITRATE $ASPECT -pass 1 -passlogfile $TMPDIR/log.log -y /dev/null &
+  nice -n 15 ffmpeg -vstats_file $TMPDIR/vstats -i "$INFILE" -y $LOGLEVEL $FROM $DURATION $TO -vcodec libx264 -pix_fmt yuv420p -profile:v baseline -preset slower -f mov -sn -acodec copy -g 300 -bf 2 -strict 1 -ac 2 $RESOLUTION $THREADS -trellis 1 -mbd 2 $BITRATE $ASPECT -pass 1 -passlogfile $TMPDIR/log.log -y /dev/null &
   PID=$! &&
   echo "Length: $DUR - Frames: $TOT_FR $INACCURATE"
   echo ""
@@ -188,7 +201,7 @@ if [ "$PASSES" == "2" ]; then
   echo "$(($diff1 / 60)) minutes and $(($diff1 % 60)) seconds elapsed for the first pass."
   echo "----------------------------------------------------------------------------"
 
-  nice -n 15 ffmpeg -vstats_file $TMPDIR/vstats -i "$INFILE" -y $LOGLEVEL $FROM $DURATION -vcodec libx264 -pix_fmt yuv420p -profile:v baseline -preset slower -f mov -sn -acodec copy -g 300 -bf 2 -strict 1 -ac 2 $RESOLUTION $THREADS -trellis 1 -mbd 2 $BITRATE $ASPECT -pass 2 -passlogfile $TMPDIR/log.log "$OUTFILE" &
+  nice -n 15 ffmpeg -vstats_file $TMPDIR/vstats -i "$INFILE" -y $LOGLEVEL $FROM $DURATION $TO -vcodec libx264 -pix_fmt yuv420p -profile:v baseline -preset slower -f mov -sn -acodec copy -g 300 -bf 2 -strict 1 -ac 2 $RESOLUTION $THREADS -trellis 1 -mbd 2 $BITRATE $ASPECT -pass 2 -passlogfile $TMPDIR/log.log "$OUTFILE" &
   PID=$! &&
   echo "Length: $DUR - Frames: $TOT_FR $INACCURATE"
   echo ""
@@ -202,7 +215,7 @@ if [ "$PASSES" == "2" ]; then
   echo "$(($diff2 / 60)) minutes and $(($diff2 % 60)) seconds elapsed for the second pass."
   echo "----------------------------------------------------------------------------"
 else
-  nice -n 15 ffmpeg -vstats_file $TMPDIR/vstats -i "$INFILE" -y $LOGLEVEL $FROM $DURATION -vcodec libx264 -pix_fmt yuv420p -profile:v baseline -preset slower -f mov -sn -acodec copy -g 300 -bf 2 -strict 1 -ac 2 $RESOLUTION $THREADS -trellis 1 -mbd 2 $BITRATE $ASPECT -pass 1 "$OUTFILE" &
+  nice -n 15 ffmpeg -vstats_file $TMPDIR/vstats -i "$INFILE" -y $LOGLEVEL $FROM $DURATION $TO -vcodec libx264 -pix_fmt yuv420p -profile:v baseline -preset slower -f mov -sn -acodec copy -g 300 -bf 2 -strict 1 -ac 2 $RESOLUTION $THREADS -trellis 1 -mbd 2 $BITRATE $ASPECT -pass 1 "$OUTFILE" &
   PID=$! &&
   echo "Length: $DUR - Frames: $TOT_FR $INACCURATE"
   echo ""

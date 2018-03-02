@@ -86,13 +86,16 @@ Usage: ./vcompress [options] input.mov output.mov
 -h| --help                 :  Print this help.
 -s| --start 3              :  Start encoding at 3 seconds.
 -d| --duration 4           :  Encode only 4 seconds.
+-e| --end 2                :  Cut 2 seconds from the end.
 -t| --threads 4            :  Use 4 threads. Default: 8.
 -r| --resolution 1920x1080 :  Change resolution. Default: keep.
 -a| --aspect 16:9          :  Change aspect ratio. Default: keep.
 -b| --bitrate 9000k        :  Bitrate (quality). Default: 9000k.
 -p| --passes 2             :  Use 1 or two passes. Default: 2.
 -f| --flash                :  Also generate .flv file. Default: don't generate.
--l| --loglevel             :  Verbosity. Default: warning. Other values: quiet|panic|fatal|error|warning|info|verbose|debug
+-l| --loglevel             :  Verbosity. Default: warning. Other values: quiet|panic|fatal|error|warning|info|verbose|
+debug
+-i| --ipad                 :  Recode Audio for iPad / VLC
 ```
 
 ### -s / --start
@@ -111,6 +114,10 @@ of your compression, like so:
 ```
 
 Notice, also, that like with the -s parameter, the progress bar will not be correct.
+
+### -e / --end
+
+This parameter allows you to specify how many seconds you want to remove from the end of the video. Again, the progress bar will not be correct.
 
 ### -t / --threads
 
@@ -140,6 +147,10 @@ Convert the final result in addition into a flash file. This is useful if you wa
 
 Default is warning which makes ffmpeg less verbose and allows you to concentrate on the actual progress.
 
+### -i / --ipad
+
+As a late addition, this is a conversion done to support audio conversion for the iPad, so that VLC on iPad will play the sound correctly. Be careful as this parameter will replace the input file with the output file once
+the conversion is finished, so that the parameter can be used together with the other conversion options: If you specify this parameter, first of all the audio conversion is done, and the output file will then replace the input file. Then the subsequent conversions are done.
 
 ----------
 
